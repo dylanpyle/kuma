@@ -26,20 +26,47 @@ def loadBranch(String branch) {
 
 node {
   stage("Prepare") {
-    checkout scm
-    sh 'git submodule sync'
-    sh 'git submodule update --init --recursive'
+    if (env.JOB_NAME.startsWith('kumascript/')) {
+      // Running tests for a mdn/kumascript branch
+      jenkins_root = 'kumascript'
+
+      // Checkout Kuma project's master branch
+      checkout([$class: 'GitSCM',
+                branches: [[name: 'refs/heads/master']],
+                doGenerateSubmoduleConfigurations: false,
+                extensions: [[$class: 'SubmoduleOption',
+                              disableSubmodules: false,
+                              parentCredentials: false,
+                              recursiveSubmodules: true,
+                              reference: '',
+                              trackingSubmodules: false]],
+                submoduleCfg: [],
+                userRemoteConfigs: [[url: 'https://github.com/mozilla/kumascript']]
+               ])
+      dir('kumascript') {
+        checkout scm
+      }
+    }
+    else {
+      // Running tests for the mozilla/kuma branch
+      jenkins_root = '.'
+      checkout scm
+      sh 'git submodule sync'
+      sh 'git submodule update --init --recursive'
+    }
     setGitEnvironmentVariables()
     // Set UID to jenkins
     env['UID'] = 1000
 
     // When checking in a file exists in another directory start with './' or
     // prepare to fail.
-    if (fileExists("./Jenkinsfiles/${env.BRANCH_NAME}.groovy") || fileExists("./Jenkinsfiles/${env.BRANCH_NAME}.yml")) {
-      loadBranch(env.BRANCH_NAME)
-    }
-    else {
-      loadBranch("default")
+    dir(jenkins_root) {
+      if (fileExists("./Jenkinsfiles/${env.BRANCH_NAME}.groovy") || fileExists("./Jenkinsfiles/${env.BRANCH_NAME}.yml")) {
+        loadBranch(env.BRANCH_NAME)
+      }
+      else {
+        loadBranch("default")
+      }
     }
   }
 }
